@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::time::{Duration, UNIX_EPOCH};
 
 use crossterm::event::{self, Event, KeyCode, KeyEvent};
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
+use crossterm::terminal;
 use crossterm::{cursor, execute};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -50,7 +50,7 @@ fn main() {
 
     let scan_result = scan_folders(&mut out, &starting_dir, &mut data_file);
 
-    _ = disable_raw_mode();
+    _ = terminal::disable_raw_mode();
     println!("");
 
     match scan_result {
@@ -106,7 +106,7 @@ fn scan_folders(
     starting_dir: &PathBuf,
     data_file: &mut Vec<FileEntry>,
 ) -> Result<(), Box<dyn Error>> {
-    enable_raw_mode()?;
+    terminal::enable_raw_mode()?;
 
     let mut pending_directories_list: Vec<PathBuf> = Vec::default();
 
@@ -132,7 +132,7 @@ fn process_folder(
     let mut file_list: Vec<PathBuf> = Vec::default();
     let mut subdirectory_list: Vec<PathBuf> = Vec::default();
 
-    for current_entry in read_dir(current_path)? {
+    for current_entry in read_dir(&current_path)? {
         check_exit_key_pressed()?;
 
         match current_entry {
@@ -151,8 +151,15 @@ fn process_folder(
             }
         }
     }
+    
+    let terminal_width: usize = terminal::size().map(|size| size.0).unwrap_or(75).into();
 
-    for current_file in file_list {
+    for (index, current_file) in file_list.iter().enumerate() {
+        let progress = (index + 1) * 100 / file_list.len();
+
+        println!("{progress}% {:1$.1$}", current_path.to_string_lossy(), terminal_width - 5);
+        execute!(out, cursor::MoveToPreviousLine(1))?;
+
         let file_name = current_file.to_string_lossy().to_string();
 
         let file = File::open(current_file)?;
@@ -174,9 +181,6 @@ fn process_folder(
         }
 
         let hash = hash_file(file)?;
-
-        print!("{file_name} {hash}");
-        execute!(out, cursor::MoveToNextLine(1))?;
 
         match entry_position {
             Ok(entry_position) => {
