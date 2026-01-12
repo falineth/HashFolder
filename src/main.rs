@@ -1,6 +1,6 @@
+mod errors;
+
 use std::env::current_dir;
-use std::error::Error;
-use std::fmt::Display;
 use std::fs::{File, OpenOptions, read_dir};
 use std::io::{BufReader, BufWriter, Read, Stdout, stdout};
 use std::os::unix::fs::MetadataExt;
@@ -8,8 +8,8 @@ use std::path::PathBuf;
 use std::time::{Duration, UNIX_EPOCH};
 
 use crossterm::event::{self, Event, KeyCode, KeyEvent};
-use crossterm::terminal;
-use crossterm::{cursor, execute};
+use crossterm::{cursor, execute, terminal};
+use errors::{AbortError, AppError, AppErrorResult};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -22,17 +22,6 @@ struct FileEntry {
     hash: String,
     modified: u64,
 }
-
-#[derive(Debug, Default)]
-struct AbortError {}
-
-impl Display for AbortError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Program Aborted")
-    }
-}
-
-impl Error for AbortError {}
 
 fn main() {
     let starting_dir = match current_dir() {
@@ -55,31 +44,32 @@ fn main() {
 
     match scan_result {
         Ok(()) => println!("Done"),
-        Err(err) => println!("{err:?}"),
+        Err(err) => println!("{err}"),
     }
 
     if let Err(err) = save_hash_data(starting_dir, data_file) {
-        println!("{err:?}");
+        println!("{} {:?}", err.caller, err.error);
     }
 }
 
-fn save_hash_data(starting_dir: PathBuf, data_file: Vec<FileEntry>) -> Result<(), Box<dyn Error>> {
+fn save_hash_data(starting_dir: PathBuf, data_file: Vec<FileEntry>) -> Result<(), AppError> {
     let hash_data_filename = starting_dir.join(HASH_DATA_FILENAME);
 
     let hash_data_file = OpenOptions::new()
         .write(true)
         .truncate(true)
         .create(true)
-        .open(hash_data_filename)?;
+        .open(hash_data_filename)
+        .app_err()?;
 
     let writer = BufWriter::new(hash_data_file);
 
-    serde_json::to_writer(writer, &data_file)?;
+    serde_json::to_writer(writer, &data_file).app_err()?;
 
     return Ok(());
 }
 
-fn load_current_hash_data(starting_dir: &PathBuf) -> Result<Vec<FileEntry>, Box<dyn Error>> {
+fn load_current_hash_data(starting_dir: &PathBuf) -> Result<Vec<FileEntry>, AppError> {
     let hash_data_file = starting_dir.join(HASH_DATA_FILENAME);
 
     if !hash_data_file.exists() {
@@ -87,12 +77,12 @@ fn load_current_hash_data(starting_dir: &PathBuf) -> Result<Vec<FileEntry>, Box<
     }
 
     if !hash_data_file.is_file() {
-        Err(AbortError::default())?;
+        Err(AbortError::default()).app_err()?;
     }
 
-    let file = File::open(hash_data_file)?;
+    let file = File::open(hash_data_file).app_err()?;
 
-    let mut hash_data: Vec<FileEntry> = serde_json::from_reader(file)?;
+    let mut hash_data: Vec<FileEntry> = serde_json::from_reader(file).app_err()?;
 
     if !hash_data.is_sorted_by_key(|entry| &entry.file_name) {
         hash_data.sort_by(|a, b| a.file_name.cmp(&b.file_name));
@@ -105,8 +95,8 @@ fn scan_folders(
     out: &mut Stdout,
     starting_dir: &PathBuf,
     data_file: &mut Vec<FileEntry>,
-) -> Result<(), Box<dyn Error>> {
-    terminal::enable_raw_mode()?;
+) -> Result<(), AppError> {
+    terminal::enable_raw_mode().app_err()?;
 
     let mut pending_directories_list: Vec<PathBuf> = Vec::default();
 
@@ -128,17 +118,17 @@ fn process_folder(
     out: &mut Stdout,
     current_path: PathBuf,
     hash_data: &mut Vec<FileEntry>,
-) -> Result<Vec<PathBuf>, Box<dyn Error>> {
+) -> Result<Vec<PathBuf>, AppError> {
     let mut file_list: Vec<PathBuf> = Vec::default();
     let mut subdirectory_list: Vec<PathBuf> = Vec::default();
 
-    for current_entry in read_dir(&current_path)? {
+    for current_entry in read_dir(&current_path).app_err()? {
         check_exit_key_pressed()?;
 
         match current_entry {
             Err(err) => {
                 print!("Error reading directory entry: {err:?}");
-                execute!(out, cursor::MoveToNextLine(1))?;
+                execute!(out, cursor::MoveToNextLine(1)).app_err()?;
             }
             Ok(entry) => {
                 let path = entry.path();
@@ -151,22 +141,31 @@ fn process_folder(
             }
         }
     }
-    
+
     let terminal_width: usize = terminal::size().map(|size| size.0).unwrap_or(75).into();
 
     for (index, current_file) in file_list.iter().enumerate() {
         let progress = (index + 1) * 100 / file_list.len();
 
-        println!("{progress}% {:1$.1$}", current_path.to_string_lossy(), terminal_width - 5);
-        execute!(out, cursor::MoveToPreviousLine(1))?;
+        println!(
+            "{progress}% {:1$.1$}",
+            current_path.to_string_lossy(),
+            terminal_width - 5
+        );
+        execute!(out, cursor::MoveToPreviousLine(1)).app_err()?;
 
         let file_name = current_file.to_string_lossy().to_string();
 
-        let file = File::open(current_file)?;
+        let file = File::open(current_file).app_err()?;
 
-        let metadata = file.metadata()?;
+        let metadata = file.metadata().app_err()?;
 
-        let modified = metadata.modified()?.duration_since(UNIX_EPOCH)?.as_secs();
+        let modified = metadata
+            .modified()
+            .app_err()?
+            .duration_since(UNIX_EPOCH)
+            .app_err()?
+            .as_secs();
 
         let file_size = metadata.size();
 
@@ -205,7 +204,7 @@ fn process_folder(
     return Ok(subdirectory_list);
 }
 
-fn hash_file(file: File) -> Result<String, Box<dyn Error>> {
+fn hash_file(file: File) -> Result<String, AppError> {
     let mut reader = BufReader::new(file);
 
     let mut hasher = Sha256::default();
@@ -214,7 +213,7 @@ fn hash_file(file: File) -> Result<String, Box<dyn Error>> {
     loop {
         check_exit_key_pressed()?;
 
-        let n = reader.read(&mut buffer)?;
+        let n = reader.read(&mut buffer).app_err()?;
         if n == 0 {
             break;
         }
@@ -224,10 +223,10 @@ fn hash_file(file: File) -> Result<String, Box<dyn Error>> {
     Ok(hex::encode(hasher.finalize().to_vec()))
 }
 
-fn check_exit_key_pressed() -> Result<(), Box<dyn Error>> {
+fn check_exit_key_pressed() -> Result<(), AppError> {
     loop {
-        if event::poll(Duration::ZERO)? {
-            match event::read()? {
+        if event::poll(Duration::ZERO).app_err()? {
+            match event::read().app_err()? {
                 Event::Key(KeyEvent {
                     code,
                     modifiers: _,
@@ -235,7 +234,7 @@ fn check_exit_key_pressed() -> Result<(), Box<dyn Error>> {
                     state: _,
                 }) => match code {
                     KeyCode::Char('q') => {
-                        Err(AbortError::default())?;
+                        Err(AbortError::default()).app_err()?;
                     }
                     _ => (),
                 },
