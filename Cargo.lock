@@ -3,18 +3,6 @@
 version = 4
 
 [[package]]
-name = "HashFolder"
-version = "0.1.0"
-dependencies = [
- "clap",
- "crossterm",
- "hex",
- "serde",
- "serde_json",
- "sha2",
-]
-
-[[package]]
 name = "anstream"
 version = "0.6.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -232,6 +220,18 @@ checksum = "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a"
 dependencies = [
  "typenum",
  "version_check",
+]
+
+[[package]]
+name = "hashfolder"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "crossterm",
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]
