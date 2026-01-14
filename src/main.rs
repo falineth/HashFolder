@@ -44,6 +44,10 @@ struct Args {
     #[arg(short, long)]
     other: Option<PathBuf>,
 
+    /// Show report without other path
+    #[arg(short, long)]
+    report: bool,
+
     /// Minimum duplicate file size to report
     #[arg(short, long)]
     minimum: Option<u64>,
@@ -107,17 +111,9 @@ fn main() {
         }
     }
 
-    if let Some(other) = args.other {
-        let other_data_file = match load_current_hash_data(&other, false) {
-            Ok(other_data_file) => other_data_file,
-            Err(err) => {
-                println!("{err}");
-                return;
-            }
-        };
-
+    if args.other.is_some() || args.report {
         let mut hash_index: HashMap<String, Vec<FileEntry>> =
-            HashMap::with_capacity(other_data_file.len() + data_file.len());
+            HashMap::with_capacity(data_file.len());
 
         for mut file in data_file {
             let hash = take(&mut file.hash);
@@ -127,12 +123,22 @@ fn main() {
             hash_group.push(file);
         }
 
-        for mut file in other_data_file {
-            let hash = take(&mut file.hash);
+        if let Some(other) = args.other {
+            let other_data_file = match load_current_hash_data(&other, false) {
+                Ok(other_data_file) => other_data_file,
+                Err(err) => {
+                    println!("{err}");
+                    return;
+                }
+            };
 
-            let hash_group = hash_index.entry(hash).or_insert(Vec::default());
+            for mut file in other_data_file {
+                let hash = take(&mut file.hash);
 
-            hash_group.push(file);
+                let hash_group = hash_index.entry(hash).or_insert(Vec::default());
+
+                hash_group.push(file);
+            }
         }
 
         let mut hash_list: Vec<Vec<FileEntry>> = hash_index
