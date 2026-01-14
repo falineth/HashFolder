@@ -52,13 +52,13 @@ struct Args {
 fn main() {
     let args = Args::parse();
 
-    let starting_dir = args.path.unwrap_or(match current_dir() {
+    let starting_dir = match get_starting_dir(&args) {
         Ok(current_dir) => current_dir,
         Err(err) => {
             println!("{err:?}");
             return;
         }
-    });
+    };
 
     if !starting_dir.exists() {
         println!("Path not found: {}", starting_dir.to_string_lossy());
@@ -161,6 +161,14 @@ fn main() {
             }
         }
     }
+}
+
+fn get_starting_dir(args: &Args) -> Result<PathBuf, AppError> {
+    if let Some(path) = &args.path {
+        return path.canonicalize().app_err();
+    }
+
+    return current_dir().app_err();
 }
 
 fn purge_old_files(hash_data: Vec<FileEntry>) -> Result<Vec<FileEntry>, AppError> {
