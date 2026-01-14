@@ -77,6 +77,8 @@ fn main() {
         .expect("Should be able to read hash data file if it exists");
 
     if !args.skip {
+        println!("Press Q to stop and save progress");
+
         let mut out: Stdout = stdout();
 
         data_file = match purge_old_files(data_file) {
