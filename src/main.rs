@@ -79,6 +79,14 @@ fn main() {
     if !args.skip {
         let mut out: Stdout = stdout();
 
+        data_file = match purge_old_files(data_file) {
+            Ok(data_file) => data_file,
+            Err(err) => {
+                println!("{err}");
+                return;
+            }
+        };
+
         let scan_result = scan_folders(&mut out, &starting_dir, &mut data_file);
 
         _ = terminal::disable_raw_mode();
@@ -153,6 +161,20 @@ fn main() {
             }
         }
     }
+}
+
+fn purge_old_files(hash_data: Vec<FileEntry>) -> Result<Vec<FileEntry>, AppError> {
+    let mut result: Vec<FileEntry> = Vec::new();
+
+    for file in hash_data.into_iter() {
+        check_exit_key_pressed()?;
+
+        if PathBuf::from(&file.file_name).is_file() {
+            result.push(file);
+        }
+    }
+
+    return Ok(result);
 }
 
 fn format_file_size(size: u64) -> (u64, &'static str) {
