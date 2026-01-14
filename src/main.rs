@@ -1,17 +1,23 @@
 mod errors;
 
+use std::cmp::Reverse;
+use std::collections::HashMap;
 use std::env::current_dir;
 use std::fs::{File, OpenOptions, read_dir};
 use std::io::{BufReader, BufWriter, Read, Stdout, stdout};
+use std::mem::take;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 use std::time::{Duration, UNIX_EPOCH};
 
+use clap::{Parser, arg, command};
 use crossterm::event::{self, Event, KeyCode, KeyEvent};
 use crossterm::{cursor, execute, terminal};
-use errors::{AbortError, AppError, AppErrorResult};
+use errors::AppErrorResult;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+
+use crate::errors::AppError;
 
 const HASH_DATA_FILENAME: &str = "hash.json";
 
@@ -23,36 +29,143 @@ struct FileEntry {
     modified: u64,
 }
 
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// Base path to scan
+    #[arg(short, long)]
+    path: Option<PathBuf>,
+
+    /// Skip updating base path hashes
+    #[arg(short, long)]
+    skip: bool,
+
+    /// Path to compare
+    #[arg(short, long)]
+    other: Option<PathBuf>,
+
+    /// Minimum duplicate file size to report
+    #[arg(short, long)]
+    minimum: Option<u64>,
+}
+
 fn main() {
-    let starting_dir = match current_dir() {
+    let args = Args::parse();
+
+    let starting_dir = args.path.unwrap_or(match current_dir() {
         Ok(current_dir) => current_dir,
         Err(err) => {
             println!("{err:?}");
             return;
         }
-    };
+    });
 
-    let mut data_file = load_current_hash_data(&starting_dir)
-        .expect("Should be able to read hash data file if it exists");
-
-    let mut out: Stdout = stdout();
-
-    let scan_result = scan_folders(&mut out, &starting_dir, &mut data_file);
-
-    _ = terminal::disable_raw_mode();
-    println!("");
-
-    match scan_result {
-        Ok(()) => println!("Done"),
-        Err(err) => println!("{err}"),
+    if !starting_dir.exists() {
+        println!("Path not found: {}", starting_dir.to_string_lossy());
+        return;
     }
 
-    if let Err(err) = save_hash_data(starting_dir, data_file) {
-        println!("{} {:?}", err.caller, err.error);
+    if !starting_dir.is_dir() {
+        println!(
+            "Path is not a directory: {}",
+            starting_dir.to_string_lossy()
+        );
+        return;
+    }
+
+    let mut data_file = load_current_hash_data(&starting_dir, true)
+        .expect("Should be able to read hash data file if it exists");
+
+    if !args.skip {
+        let mut out: Stdout = stdout();
+
+        let scan_result = scan_folders(&mut out, &starting_dir, &mut data_file);
+
+        _ = terminal::disable_raw_mode();
+        println!("");
+
+        if let Err(err) = save_hash_data(&starting_dir, &data_file) {
+            println!("{err}");
+        }
+
+        match scan_result {
+            Ok(()) => println!("Done"),
+            Err(err) => {
+                println!("{err}");
+                return;
+            }
+        }
+    }
+
+    if let Some(other) = args.other {
+        let other_data_file = match load_current_hash_data(&other, false) {
+            Ok(other_data_file) => other_data_file,
+            Err(err) => {
+                println!("{err}");
+                return;
+            }
+        };
+
+        let mut hash_index: HashMap<String, Vec<FileEntry>> =
+            HashMap::with_capacity(other_data_file.len() + data_file.len());
+
+        for mut file in data_file {
+            let hash = take(&mut file.hash);
+
+            let hash_group = hash_index.entry(hash).or_insert(Vec::default());
+
+            hash_group.push(file);
+        }
+
+        for mut file in other_data_file {
+            let hash = take(&mut file.hash);
+
+            let hash_group = hash_index.entry(hash).or_insert(Vec::default());
+
+            hash_group.push(file);
+        }
+
+        let mut hash_list: Vec<Vec<FileEntry>> = hash_index
+            .into_values()
+            .filter(|hash| hash.len() > 1)
+            .collect();
+
+        hash_list.sort_unstable_by_key(|entry| {
+            Reverse(entry.first().map(|file| file.file_size).unwrap_or_default())
+        });
+
+        for hash_group in hash_list {
+            let size = hash_group
+                .first()
+                .map(|file| file.file_size)
+                .unwrap_or_default();
+
+            if size < args.minimum.unwrap_or(1) {
+                continue;
+            }
+
+            let (size, unit) = format_file_size(size);
+
+            println!();
+            println!("{} files {}{} each", hash_group.len(), size, unit);
+            for file in hash_group {
+                println!("{}", file.file_name);
+            }
+        }
     }
 }
 
-fn save_hash_data(starting_dir: PathBuf, data_file: Vec<FileEntry>) -> Result<(), AppError> {
+fn format_file_size(size: u64) -> (u64, &'static str) {
+    match size {
+        ..1_000 => (size, "B"),
+        ..1_000_000 => (size / 1_000, "KB"),
+        ..1_000_000_000 => (size / 1_000_000, "MB"),
+        ..1_000_000_000_000 => (size / 1_000_000_000, "GB"),
+        _ => (size / 1_000_000_000_000, "TB"),
+    }
+}
+
+fn save_hash_data(starting_dir: &PathBuf, data_file: &Vec<FileEntry>) -> Result<(), AppError> {
     let hash_data_filename = starting_dir.join(HASH_DATA_FILENAME);
 
     let hash_data_file = OpenOptions::new()
@@ -69,15 +182,27 @@ fn save_hash_data(starting_dir: PathBuf, data_file: Vec<FileEntry>) -> Result<()
     return Ok(());
 }
 
-fn load_current_hash_data(starting_dir: &PathBuf) -> Result<Vec<FileEntry>, AppError> {
+fn load_current_hash_data(
+    starting_dir: &PathBuf,
+    create: bool,
+) -> Result<Vec<FileEntry>, AppError> {
     let hash_data_file = starting_dir.join(HASH_DATA_FILENAME);
 
     if !hash_data_file.exists() {
-        return Ok(Vec::default());
+        if create {
+            return Ok(Vec::default());
+        } else {
+            return Err(AppError::new(format!(
+                "Comparison hash data file not found"
+            )))?;
+        }
     }
 
     if !hash_data_file.is_file() {
-        Err(AbortError::default()).app_err()?;
+        Err(AppError::new(format!(
+            "Expected {} to be a file",
+            hash_data_file.to_string_lossy()
+        )))?;
     }
 
     let file = File::open(hash_data_file).app_err()?;
@@ -234,7 +359,7 @@ fn check_exit_key_pressed() -> Result<(), AppError> {
                     state: _,
                 }) => match code {
                     KeyCode::Char('q') => {
-                        Err(AbortError::default()).app_err()?;
+                        Err(AppError::new(format!("Abort key pressed")))?;
                     }
                     _ => (),
                 },
