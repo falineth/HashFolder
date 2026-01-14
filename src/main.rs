@@ -247,7 +247,20 @@ fn process_folder(
     let mut file_list: Vec<PathBuf> = Vec::default();
     let mut subdirectory_list: Vec<PathBuf> = Vec::default();
 
-    for current_entry in read_dir(&current_path).app_err()? {
+    let dir_reader = match read_dir(&current_path) {
+        Ok(dir) => dir,
+        Err(err) => {
+            println!(
+                "Error reading directory {}: {}",
+                current_path.to_string_lossy(),
+                err
+            );
+            execute!(out, cursor::MoveToNextLine(1)).app_err()?;
+            return Ok(subdirectory_list);
+        }
+    };
+
+    for current_entry in dir_reader {
         check_exit_key_pressed()?;
 
         match current_entry {
@@ -281,7 +294,18 @@ fn process_folder(
 
         let file_name = current_file.to_string_lossy().to_string();
 
-        let file = File::open(current_file).app_err()?;
+        let file = match OpenOptions::new().read(true).open(current_file) {
+            Ok(file) => file,
+            Err(err) => {
+                println!(
+                    "Error reading file {}: {}",
+                    current_path.to_string_lossy(),
+                    err
+                );
+                execute!(out, cursor::MoveToNextLine(1)).app_err()?;
+                continue;
+            }
+        };
 
         let metadata = file.metadata().app_err()?;
 
