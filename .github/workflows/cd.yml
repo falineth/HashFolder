@@ -9,13 +9,11 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  build-arm:
     runs-on: ubuntu-22.04-arm
 
     steps:
       - uses: actions/checkout@v4
-
-      - run: ldd --version
 
       - name: Build
         run: cargo build -r --verbose
@@ -23,6 +21,22 @@ jobs:
       - name: Artifact - Linux Binary arm64
         uses: actions/upload-artifact@v4
         with:
-          name: linux_binary
+          name: hashfolder-arm64
+          retention-days: 1
+          path: ./target/release/hashfolder
+
+  build-x86_64:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: cargo build -r --verbose
+
+      - name: Artifact - Linux Binary x86_64
+        uses: actions/upload-artifact@v4
+        with:
+          name: hashfolder-x86_64
           retention-days: 1
           path: ./target/release/hashfolder
