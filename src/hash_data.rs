@@ -1,6 +1,6 @@
 use std::fs::{File, OpenOptions};
 use std::io::BufWriter;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -17,12 +17,12 @@ pub struct FileEntry {
 }
 
 pub fn load_current_hash_data(
-    starting_dir: &Path,
+    source_path: &Path,
     create: bool,
 ) -> Result<Vec<FileEntry>, AppError> {
-    let hash_data_file = starting_dir.join(HASH_DATA_FILENAME);
+    let hash_data_file_path = get_hash_data_file_path(source_path, create)?;
 
-    if !hash_data_file.exists() {
+    if !hash_data_file_path.exists() {
         if create {
             return Ok(Vec::default());
         } else {
@@ -30,14 +30,14 @@ pub fn load_current_hash_data(
         }
     }
 
-    if !hash_data_file.is_file() {
+    if !hash_data_file_path.is_file() {
         Err(AppError::new(format!(
             "Expected {} to be a file",
-            hash_data_file.to_string_lossy()
+            hash_data_file_path.to_string_lossy()
         )))?;
     }
 
-    let file = File::open(hash_data_file).app_err()?;
+    let file = File::open(hash_data_file_path).app_err()?;
 
     let mut hash_data: Vec<FileEntry> = serde_json::from_reader(file).app_err()?;
 
@@ -46,6 +46,27 @@ pub fn load_current_hash_data(
     }
 
     return Ok(hash_data);
+}
+
+pub fn get_hash_data_file_path(source_path: &Path, create: bool) -> Result<PathBuf, AppError> {
+    if source_path.is_file() {
+        return Ok(source_path.to_owned());
+    }
+
+    if source_path.is_dir() {
+        let data_file_path = source_path.join(HASH_DATA_FILENAME);
+
+        if data_file_path.is_file() || create {
+            return Ok(data_file_path);
+        } else {
+            return Err(AppError::new("Comparison path does not contain hash data file".into()));
+        }
+    }
+
+    return Err(AppError::new(format!(
+        "Comparison path {} not found",
+        source_path.to_string_lossy()
+    )));
 }
 
 pub fn save_hash_data(starting_dir: &Path, data_file: &Vec<FileEntry>) -> Result<(), AppError> {
