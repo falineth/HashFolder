@@ -9,7 +9,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-arm:
+  build-linux-arm:
     runs-on: ubuntu-22.04-arm
 
     steps:
@@ -21,11 +21,11 @@ jobs:
       - name: Artifact - Linux Binary arm64
         uses: actions/upload-artifact@v4
         with:
-          name: hashfolder-arm64
+          name: hashfolder-linux-arm64
           retention-days: 1
           path: ./target/release/hashfolder
 
-  build-x86_64:
+  build-linux-x86_64:
     runs-on: ubuntu-latest
 
     steps:
@@ -37,6 +37,22 @@ jobs:
       - name: Artifact - Linux Binary x86_64
         uses: actions/upload-artifact@v4
         with:
-          name: hashfolder-x86_64
+          name: hashfolder-linux-x86_64
           retention-days: 1
           path: ./target/release/hashfolder
+
+  build-windows-x86_64:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: cargo build -r --verbose
+
+      - name: Artifact - Windows Binary x86_64
+        uses: actions/upload-artifact@v4
+        with:
+          name: hashfolder-windows-x86_64
+          retention-days: 1
+          path: .\target\release\hashfolder.exe
