@@ -7,19 +7,15 @@ use crate::errors::{AppError, AppErrorResult};
 pub fn check_exit_key_pressed() -> Result<(), AppError> {
     loop {
         if event::poll(Duration::ZERO).app_err()? {
-            match event::read().app_err()? {
-                Event::Key(KeyEvent {
-                    code,
-                    modifiers: _,
-                    kind: _,
-                    state: _,
-                }) => match code {
-                    KeyCode::Char('q') => {
-                        Err(AppError::new(format!("Abort key pressed")))?;
-                    }
-                    _ => (),
-                },
-                _ => (),
+            if let Event::Key(KeyEvent {
+                code,
+                modifiers: _,
+                kind: _,
+                state: _,
+            }) = event::read().app_err()?
+                && let KeyCode::Char('q') = code
+            {
+                Err(AppError::new("Abort key pressed".into()))?;
             }
         } else {
             return Ok(());

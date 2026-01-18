@@ -25,10 +25,10 @@ pub fn scan_folder_tree(
         err => return (None, Some(err))
     );
 
-    let scan_result = scan_for_new_and_updated(&mut out, &starting_dir, &mut data_file);
+    let scan_result = scan_for_new_and_updated(&mut out, starting_dir, &mut data_file);
 
     _ = terminal::disable_raw_mode();
-    println!("");
+    println!();
 
     return (Some(data_file), scan_result.err());
 }
@@ -148,12 +148,12 @@ fn process_folder(
 
         let entry_position = hash_data.binary_search_by_key(&&file_name, |entry| &entry.file_name);
 
-        if let Ok(entry_position) = entry_position {
-            if let Some(entry) = hash_data.get(entry_position) {
-                if entry.file_size == file_size && entry.modified == modified {
-                    continue;
-                }
-            }
+        if let Ok(entry_position) = entry_position
+            && let Some(entry) = hash_data.get(entry_position)
+            && entry.file_size == file_size
+            && entry.modified == modified
+        {
+            continue;
         }
 
         let hash = hash_file(file)?;
@@ -197,5 +197,5 @@ fn hash_file(file: File) -> Result<String, AppError> {
         hasher.update(&buffer[..n]);
     }
 
-    Ok(hex::encode(hasher.finalize().to_vec()))
+    Ok(hex::encode(hasher.finalize()))
 }

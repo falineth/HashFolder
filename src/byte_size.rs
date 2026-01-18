@@ -15,9 +15,9 @@ pub enum ByteSize {
     TiByte(u64),
 }
 
-impl Into<u64> for ByteSize {
-    fn into(self) -> u64 {
-        match self {
+impl From<ByteSize> for u64 {
+    fn from(value: ByteSize) -> u64 {
+        match value {
             ByteSize::Byte(value) => value,
             ByteSize::KByte(value) => value * 1000,
             ByteSize::KiByte(value) => value * 1024,
@@ -64,16 +64,16 @@ impl TypedValueParser for ByteSizeValueParser {
 
             err.insert(
                 ContextKind::InvalidValue,
-                ContextValue::String(format!("Invalid UTF8")),
+                ContextValue::String("Invalid UTF8".into()),
             );
 
             return err;
         })?;
 
-        if value.bytes().all(|c| c.is_ascii_digit()) {
-            if let Ok(value) = value.parse::<u64>() {
-                return Ok(ByteSize::Byte(value));
-            }
+        if value.bytes().all(|c| c.is_ascii_digit())
+            && let Ok(value) = value.parse::<u64>()
+        {
+            return Ok(ByteSize::Byte(value));
         }
 
         let suffixes = [
@@ -95,23 +95,22 @@ impl TypedValueParser for ByteSizeValueParser {
             })
             .next();
 
-        if let Some((value, suffix)) = valid_byte_size {
-            if let Ok(value) = value.parse::<u64>() {
-                if let Some(result) = match suffix {
-                    "B" => Some(ByteSize::Byte(value)),
-                    "KB" | "K" => Some(ByteSize::KByte(value)),
-                    "KiB" => Some(ByteSize::KiByte(value)),
-                    "MB" | "M" => Some(ByteSize::MByte(value)),
-                    "MiB" => Some(ByteSize::MiByte(value)),
-                    "GB" | "G" => Some(ByteSize::GByte(value)),
-                    "GiB" => Some(ByteSize::GiByte(value)),
-                    "TB" | "T" => Some(ByteSize::TByte(value)),
-                    "TiB" => Some(ByteSize::TiByte(value)),
-                    _ => None,
-                } {
-                    return Ok(result);
-                }
+        if let Some((value, suffix)) = valid_byte_size
+            && let Ok(value) = value.parse::<u64>()
+            && let Some(result) = match suffix {
+                "B" => Some(ByteSize::Byte(value)),
+                "KB" | "K" => Some(ByteSize::KByte(value)),
+                "KiB" => Some(ByteSize::KiByte(value)),
+                "MB" | "M" => Some(ByteSize::MByte(value)),
+                "MiB" => Some(ByteSize::MiByte(value)),
+                "GB" | "G" => Some(ByteSize::GByte(value)),
+                "GiB" => Some(ByteSize::GiByte(value)),
+                "TB" | "T" => Some(ByteSize::TByte(value)),
+                "TiB" => Some(ByteSize::TiByte(value)),
+                _ => None,
             }
+        {
+            return Ok(result);
         }
 
         let mut err = clap::Error::new(clap::error::ErrorKind::ValueValidation).with_cmd(cmd);

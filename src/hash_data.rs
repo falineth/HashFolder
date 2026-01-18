@@ -1,6 +1,6 @@
 use std::fs::{File, OpenOptions};
 use std::io::BufWriter;
-use std::path::PathBuf;
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
@@ -17,7 +17,7 @@ pub struct FileEntry {
 }
 
 pub fn load_current_hash_data(
-    starting_dir: &PathBuf,
+    starting_dir: &Path,
     create: bool,
 ) -> Result<Vec<FileEntry>, AppError> {
     let hash_data_file = starting_dir.join(HASH_DATA_FILENAME);
@@ -26,9 +26,7 @@ pub fn load_current_hash_data(
         if create {
             return Ok(Vec::default());
         } else {
-            return Err(AppError::new(format!(
-                "Comparison hash data file not found"
-            )))?;
+            return Err(AppError::new("Comparison hash data file not found".into()));
         }
     }
 
@@ -50,7 +48,7 @@ pub fn load_current_hash_data(
     return Ok(hash_data);
 }
 
-pub fn save_hash_data(starting_dir: &PathBuf, data_file: &Vec<FileEntry>) -> Result<(), AppError> {
+pub fn save_hash_data(starting_dir: &Path, data_file: &Vec<FileEntry>) -> Result<(), AppError> {
     let hash_data_filename = starting_dir.join(HASH_DATA_FILENAME);
 
     let hash_data_file = OpenOptions::new()

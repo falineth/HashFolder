@@ -15,7 +15,7 @@ pub fn duplicate_report(
     for mut file in data_file {
         let hash = take(&mut file.hash);
 
-        let hash_group = hash_index.entry(hash).or_insert(Vec::default());
+        let hash_group = hash_index.entry(hash).or_default();
 
         hash_group.push(file);
     }
@@ -24,7 +24,7 @@ pub fn duplicate_report(
         for mut file in other_data_file {
             let hash = take(&mut file.hash);
 
-            let hash_group = hash_index.entry(hash).or_insert(Vec::default());
+            let hash_group = hash_index.entry(hash).or_default();
 
             hash_group.push(file);
         }
@@ -59,6 +59,7 @@ pub fn duplicate_report(
     }
 }
 
+#[allow(clippy::match_overlapping_arm)]
 fn format_file_size(size: u64) -> (u64, &'static str) {
     match size {
         ..1_000 => (size, "B"),
