@@ -1,3 +1,4 @@
+mod byte_size;
 mod errors;
 
 use std::cmp::Reverse;
@@ -17,6 +18,7 @@ use errors::AppErrorResult;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::byte_size::{ByteSize, ByteSizeValueParser};
 use crate::errors::AppError;
 
 const HASH_DATA_FILENAME: &str = "hash.json";
@@ -49,8 +51,8 @@ struct Args {
     report: bool,
 
     /// Minimum duplicate file size to report
-    #[arg(short, long)]
-    minimum: Option<u64>,
+    #[arg(short, long, value_parser = ByteSizeValueParser::new())]
+    minimum: Option<ByteSize>,
 }
 
 fn main() {
@@ -156,7 +158,7 @@ fn main() {
                 .map(|file| file.file_size)
                 .unwrap_or_default();
 
-            if size < args.minimum.unwrap_or(1) {
+            if size < args.minimum.unwrap_or(ByteSize::Byte(1)).into() {
                 continue;
             }
 
