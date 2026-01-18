@@ -52,26 +52,23 @@ impl TypedValueParser for ByteSizeValueParser {
     ) -> Result<Self::Value, clap::error::Error> {
         let value = value.to_owned().into_string();
 
-        let value = match value {
-            Ok(value) => value,
-            Err(_) => {
-                let mut err =
-                    clap::Error::new(clap::error::ErrorKind::ValueValidation).with_cmd(cmd);
-                if let Some(arg) = arg {
-                    err.insert(
-                        ContextKind::InvalidArg,
-                        ContextValue::String(arg.to_string()),
-                    );
-                }
+        let value = value.map_err(|_| {
+            let mut err = clap::Error::new(clap::error::ErrorKind::ValueValidation).with_cmd(cmd);
 
+            if let Some(arg) = arg {
                 err.insert(
-                    ContextKind::InvalidValue,
-                    ContextValue::String(format!("Invalid UTF8")),
+                    ContextKind::InvalidArg,
+                    ContextValue::String(arg.to_string()),
                 );
-
-                return Err(err);
             }
-        };
+
+            err.insert(
+                ContextKind::InvalidValue,
+                ContextValue::String(format!("Invalid UTF8")),
+            );
+
+            return err;
+        })?;
 
         if value.bytes().all(|c| c.is_ascii_digit()) {
             if let Ok(value) = value.parse::<u64>() {

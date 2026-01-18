@@ -51,13 +51,12 @@ where
     fn app_err(self) -> Result<T1, AppError> {
         let loc = std::panic::Location::caller();
 
-        match self {
-            Ok(value) => Ok(value),
-            Err(err) => Err(AppError::Caught(CaughtError {
+        self.map_err(|err| {
+            AppError::Caught(CaughtError {
                 caller: format!("Error at {}:{}", loc.file(), loc.line()),
                 error: Box::new(err),
-            })),
-        }
+            })
+        })
     }
 }
 
@@ -80,4 +79,26 @@ impl AppError {
     pub fn new(message: String) -> AppError {
         return AppError::Abort(AbortError { message });
     }
+}
+
+#[macro_export]
+macro_rules! or_else {
+    ($e:expr, none => $none_body:expr) => {{
+        match $e {
+            Some(value) => value,
+            None => $none_body,
+        }
+    }};
+    ($e:expr, _ => $err_body:expr) => {{
+        match $e {
+            Ok(value) => value,
+            Err(_) => $err_body,
+        }
+    }};
+    ($e:expr, $err:ident => $err_body:expr) => {{
+        match $e {
+            Ok(value) => value,
+            Err($err) => $err_body,
+        }
+    }};
 }
