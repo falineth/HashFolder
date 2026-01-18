@@ -59,7 +59,9 @@ pub fn get_hash_data_file_path(source_path: &Path, create: bool) -> Result<PathB
         if data_file_path.is_file() || create {
             return Ok(data_file_path);
         } else {
-            return Err(AppError::new("Comparison path does not contain hash data file".into()));
+            return Err(AppError::new(
+                "Comparison path does not contain hash data file".into(),
+            ));
         }
     }
 

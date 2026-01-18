@@ -8,7 +8,7 @@ mod utils;
 use std::env::current_dir;
 use std::path::PathBuf;
 
-use clap::{Parser, arg, command};
+use clap::Parser;
 use errors::AppErrorResult;
 
 use crate::byte_size::{ByteSize, ByteSizeValueParser};

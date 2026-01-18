@@ -1,6 +1,5 @@
 use std::fs::{File, OpenOptions, read_dir};
 use std::io::{BufReader, Read, Stdout, stdout};
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
@@ -144,7 +143,7 @@ fn process_folder(
             .app_err()?
             .as_secs();
 
-        let file_size = metadata.size();
+        let file_size = metadata.len();
 
         let entry_position = hash_data.binary_search_by_key(&&file_name, |entry| &entry.file_name);
 
