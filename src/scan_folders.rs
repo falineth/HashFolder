@@ -8,21 +8,20 @@ use sha2::{Digest, Sha256};
 
 use crate::errors::{AppError, AppErrorResult};
 use crate::hash_data::FileEntry;
-use crate::or_else;
 use crate::utils::check_exit_key_pressed;
 
 pub fn scan_folder_tree(
-    mut data_file: Vec<FileEntry>,
+    data_file: Vec<FileEntry>,
     starting_dir: &Path,
 ) -> (Option<Vec<FileEntry>>, Option<AppError>) {
     println!("Press Q to stop and save progress");
 
     let mut out: Stdout = stdout();
 
-    data_file = or_else!(
-        scan_for_deleted(data_file),
-        err => return (None, Some(err))
-    );
+    let mut data_file = match scan_for_deleted(data_file) {
+        Ok(data_file) => data_file,
+        Err(err) => return (None, Some(err)),
+    };
 
     let scan_result = scan_for_new_and_updated(&mut out, starting_dir, &mut data_file);
 
@@ -58,7 +57,9 @@ fn scan_for_new_and_updated(
     pending_directories_list.push(starting_dir.into());
 
     loop {
-        let current_directory = or_else!(pending_directories_list.pop(), none => return Ok(()));
+        let Some(current_directory) = pending_directories_list.pop() else {
+            return Ok(());
+        };
 
         let mut subdirectory_list = process_folder(out, current_directory, data_file)?;
 
@@ -74,18 +75,16 @@ fn process_folder(
     let mut file_list: Vec<PathBuf> = Vec::default();
     let mut subdirectory_list: Vec<PathBuf> = Vec::default();
 
-    let dir_reader = or_else!(
-        read_dir(&current_path),
-        err => {
-            println!(
-                "Error reading directory {}: {}",
-                current_path.to_string_lossy(),
-                err
-            );
-            execute!(out, cursor::MoveToNextLine(1)).app_err()?;
-            return Ok(subdirectory_list);
-        }
-    );
+    let Ok(dir_reader) = read_dir(&current_path).inspect_err(|err| {
+        println!(
+            "Error reading directory {}: {}",
+            current_path.to_string_lossy(),
+            err
+        );
+    }) else {
+        execute!(out, cursor::MoveToNextLine(1)).app_err()?;
+        return Ok(subdirectory_list);
+    };
 
     for current_entry in dir_reader {
         check_exit_key_pressed()?;
@@ -121,18 +120,20 @@ fn process_folder(
 
         let file_name = current_file.to_string_lossy().to_string();
 
-        let file = or_else!(
-            OpenOptions::new().read(true).open(current_file),
-            err => {
+        let Ok(file) = OpenOptions::new()
+            .read(true)
+            .open(current_file)
+            .inspect_err(|err| {
                 println!(
                     "Error reading file {}: {}",
                     current_path.to_string_lossy(),
                     err
                 );
-                execute!(out, cursor::MoveToNextLine(1)).app_err()?;
-                continue;
-            }
-        );
+            })
+        else {
+            execute!(out, cursor::MoveToNextLine(1)).app_err()?;
+            continue;
+        };
 
         let metadata = file.metadata().app_err()?;
 

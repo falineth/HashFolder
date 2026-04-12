@@ -70,7 +70,7 @@ impl Display for AppError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             AppError::Abort(abort) => write!(f, "{}", abort.message),
-            AppError::Caught(caught) => write!(f, "{} {:?}", caught.caller, caught.error),
+            AppError::Caught(caught) => write!(f, "{}\n{}", caught.caller, caught.error),
         }
     }
 }
@@ -79,26 +79,4 @@ impl AppError {
     pub fn new(message: String) -> AppError {
         return AppError::Abort(AbortError { message });
     }
-}
-
-#[macro_export]
-macro_rules! or_else {
-    ($e:expr, none => $none_body:expr) => {{
-        match $e {
-            Some(value) => value,
-            None => $none_body,
-        }
-    }};
-    ($e:expr, _ => $err_body:expr) => {{
-        match $e {
-            Ok(value) => value,
-            Err(_) => $err_body,
-        }
-    }};
-    ($e:expr, $err:ident => $err_body:expr) => {{
-        match $e {
-            Ok(value) => value,
-            Err($err) => $err_body,
-        }
-    }};
 }

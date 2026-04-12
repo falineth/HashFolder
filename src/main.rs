@@ -44,10 +44,9 @@ struct Args {
 fn main() {
     let args = Args::parse();
 
-    let starting_dir = or_else!(get_starting_dir(&args), err => {
-        println!("{err:?}");
+    let Ok(starting_dir) = get_starting_dir(&args).inspect_err(|err| println!("{err}")) else {
         return;
-    });
+    };
 
     if !starting_dir.exists() {
         println!("Path not found: {}", starting_dir.to_string_lossy());
@@ -88,13 +87,11 @@ fn main() {
     }
 
     if args.other.is_some() || args.report {
-        let other_data_file = or_else!(
-            get_other_data_file(args.other),
-            err => {
-                println!("{err}");
-                return;
-            }
-        );
+        let Ok(other_data_file) =
+            get_other_data_file(args.other).inspect_err(|err| println!("{err}"))
+        else {
+            return;
+        };
 
         duplicate_report(data_file, other_data_file, args.minimum);
     }
@@ -109,7 +106,9 @@ fn get_starting_dir(args: &Args) -> Result<PathBuf, AppError> {
 }
 
 fn get_other_data_file(other: Option<PathBuf>) -> Result<Option<Vec<FileEntry>>, AppError> {
-    let other_path = or_else!(other, none => return Ok(None));
+    let Some(other_path) = other else {
+        return Ok(None);
+    };
 
     let other_data_file = load_current_hash_data(&other_path, false)?;
 
